@@ -27,14 +27,63 @@
       <div class="generate-main">
         <!-- Template info -->
         <div class="card mb-4 border-0 shadow-sm" v-if="template">
-          <div class="card-body">
-            <div class="d-flex align-items-center gap-3">
-              <div class="template-icon">
+          <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-4">
+              <div class="template-icon shadow-sm">
                 <i class="bi bi-file-earmark-pdf-fill"></i>
               </div>
-              <div>
-                <h5 class="mb-1">{{ template.name }}</h5>
-                <div class="text-muted small">{{ template.pages?.length || 0 }} page(s) &bull; {{ (template.variables || []).length }} variable(s)</div>
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div>
+                    <h4 class="mb-1 text-white fw-bold">{{ template.name }}</h4>
+                    <div class="text-muted small d-flex align-items-center gap-2 mb-2">
+                       <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                         <i class="bi bi-file-earmark-fill me-1"></i>{{ template.pages?.length || 0 }} page(s)
+                       </span>
+                       <span class="badge bg-info-subtle text-info border border-info-subtle">
+                         <i class="bi bi-braces me-1"></i>{{ (template.variables || []).length }} variable(s)
+                       </span>
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                      <code class="text-primary-emphasis bg-primary-subtle border border-primary-subtle px-2 py-1 rounded small">ID: {{ template.id }}</code>
+                      <button @click="copyToClipboard(template.id, 'id')" class="btn btn-sm btn-ghost p-1" :title="copiedLabel === 'id' ? 'Copied!' : 'Copy ID'">
+                        <i class="bi" :class="copiedLabel === 'id' ? 'bi-check2 text-success' : 'bi-clipboard'"></i>
+                      </button>
+                    </div>
+                    <div class="small text-muted">
+                      <div><i class="bi bi-plus-circle me-1"></i>Created: {{ formatDate(template.createdAt) }}</div>
+                      <div><i class="bi bi-pencil-square me-1"></i>Updated: {{ formatDate(template.updatedAt) }}</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <p v-if="template.description" class="text-secondary small mb-3 border-start border-primary-subtle ps-3 py-1">
+                  {{ template.description }}
+                </p>
+
+                <div class="d-flex align-items-center gap-3 pt-3 border-top border-white border-opacity-10">
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-sm">
+                      <i class="bi bi-person-circle"></i>
+                    </div>
+                    <div>
+                      <div class="small fw-semibold text-white">{{ template.user?.username || 'Unknown User' }}</div>
+                      <div class="text-muted smaller">Owner</div>
+                    </div>
+                  </div>
+                  <div class="vr opacity-25" style="height: 20px;"></div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="avatar-sm text-info">
+                      <i class="bi bi-building"></i>
+                    </div>
+                    <div>
+                      <div class="small fw-semibold text-white">{{ template.user?.department?.name || 'No Department' }}</div>
+                      <div class="text-muted smaller">Department</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -168,13 +217,23 @@ X-API-Key: YOUR_API_KEY
             <div class="api-params-guide">
               <div class="row g-2">
                 <div class="col-sm-6">
-                  <div class="p-2 border rounded-3 bg-light h-100">
+                  <div 
+                    class="p-2 border rounded-3 bg-light h-100 api-card" 
+                    :class="{ 'border-primary shadow-sm': apiMode === 'file' }"
+                    @click="apiMode = 'file'"
+                    style="cursor: pointer;"
+                  >
                     <div class="fw-bold small mb-1 text-dark"><i class="bi bi-key-fill me-1 text-warning"></i> Authentication</div>
                     <div class="small text-muted">ต้องส่ง Header <code>X-API-Key</code> ทุกครั้ง (สร้างได้ในหน้า Template Settings)</div>
                   </div>
                 </div>
                 <div class="col-sm-6">
-                  <div class="p-2 border rounded-3 bg-light h-100" @click="apiMode = apiMode === 'file' ? 'base64' : 'file'" style="cursor: pointer;">
+                  <div 
+                    class="p-2 border rounded-3 bg-light h-100 api-card" 
+                    :class="{ 'border-primary shadow-sm': apiMode === 'base64' }"
+                    @click="apiMode = 'base64'" 
+                    style="cursor: pointer;"
+                  >
                     <div class="fw-bold small mb-1 text-dark"><i class="bi bi-gear-fill me-1 text-primary"></i> Response Type</div>
                     <div class="small text-muted">ระบุ <code>"responseType": "base64"</code> ใน JSON หากต้องการค่าเป็น String (Base64)</div>
                   </div>
@@ -212,6 +271,7 @@ const jsonError = ref('')
 const generating = ref(null)
 const previewUrl = ref(null)
 const apiMode = ref('file') // 'file' or 'base64'
+const copiedLabel = ref(null)
 
 const canEdit = computed(() => {
   if (!authStore.isAuthenticated) return false
@@ -329,6 +389,22 @@ function copyApiExample() {
   
   navigator.clipboard.writeText(code)
 }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('th-TH', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
+}
+
+function copyToClipboard(text, label) {
+  navigator.clipboard.writeText(text)
+  copiedLabel.value = label
+  setTimeout(() => {
+    if (copiedLabel.value === label) copiedLabel.value = null
+  }, 2000)
+}
 </script>
 
 <style scoped>
@@ -403,14 +479,25 @@ function copyApiExample() {
 }
 
 .template-icon {
-  width: 54px; height: 54px;
-  background: rgba(239, 68, 68, 0.15);
-  border-radius: 12px;
+  width: 64px; height: 64px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+  border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
   color: #f87171;
-  font-size: 24px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 28px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
+
+.avatar-sm {
+  width: 32px; height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #94a3b8;
+  font-size: 16px;
+}
+
+.smaller { font-size: 0.75rem; }
 
 .text-muted { color: #94a3b8 !important; }
 .bg-white { background: transparent !important; }
@@ -485,6 +572,13 @@ code { font-size: 12px; background: #1e293b; color: #60a5fa; padding: 2px 6px; b
 .btn-success:hover { background: #047857; }
 .btn-outline-primary { border-color: #3b82f6; color: #3b82f6; padding: 10px; font-weight: 600; border-radius: 10px; }
 .btn-outline-primary:hover { background: rgba(59, 130, 246, 0.1); }
+
+.api-card {
+  transition: all 0.2s ease;
+  border-color: #334155 !important;
+}
+.api-card:hover { border-color: #475569 !important; background: rgba(255,255,255,0.03) !important; }
+.api-card.border-primary { border-color: #3b82f6 !important; background: rgba(59, 130, 246, 0.05) !important; }
 
 .bg-light { background: #1e293b !important; border: 1px solid #334155 !important; }
 .text-dark { color: #f8fafc !important; }
