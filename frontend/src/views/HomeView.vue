@@ -180,6 +180,9 @@
                 <i class="bi bi-person-circle"></i> {{ t.user?.username || 'Unknown' }}
               </span>
             </div>
+            <div v-if="t.description" class="card-desc mt-1">
+              {{ t.description }}
+            </div>
             <div v-if="t.tags?.length" class="card-tags mt-1">
               <span v-for="tag in t.tags.slice(0,3)" :key="tag" class="tag-sm">#{{ tag }}</span>
               <span v-if="t.tags.length>3" class="tag-more">+{{ t.tags.length-3 }}</span>
@@ -308,6 +311,10 @@
                 <span class="cat-swatch sm" :style="{ background: cat.color }"></span>{{ cat.name }}
               </button>
             </div>
+            
+            <label class="field-label mt-3">Template Description (Detail)</label>
+            <textarea v-model="catModalForm.description" class="field-input" rows="2" placeholder="Describe this template..."></textarea>
+
             <label class="field-label mt-3">Tags <span class="text-muted text-xs">(comma separated)</span></label>
             <input v-model="catModalForm.tagsInput" class="field-input" type="text" placeholder="invoice, monthly, client" />
             <div v-if="allTags.length" class="tag-suggest">
@@ -682,11 +689,12 @@ async function deleteCat(node) {
 }
 
 const catModalTarget = ref(null)
-const catModalForm   = ref({ category: '', tagsInput: '', visibility: 'private', allowCopy: false })
+const catModalForm   = ref({ category: '', description: '', tagsInput: '', visibility: 'private', allowCopy: false })
 function openCatModal(t) {
   catModalTarget.value = t
   catModalForm.value = { 
     category: t.category || '', 
+    description: t.description || '',
     tagsInput: (t.tags||[]).join(', '),
     visibility: t.visibility || 'private',
     allowCopy: !!t.allowCopy
@@ -720,6 +728,7 @@ async function saveCatModal() {
     // 2. Save category + tags + ACL into template row in DB
     const res = await templatesApi.update(t.id, { 
       category, 
+      description: catModalForm.value.description,
       tags,
       visibility: catModalForm.value.visibility,
       allowCopy: catModalForm.value.allowCopy
@@ -727,6 +736,7 @@ async function saveCatModal() {
 
     // 3. Update local state from what DB returned (source of truth)
     t.category = res.data.category ?? null
+    t.description = res.data.description ?? ''
     t.tags     = Array.isArray(res.data.tags) ? res.data.tags : []
     t.visibility = res.data.visibility
     t.allowCopy = res.data.allowCopy
@@ -995,6 +1005,7 @@ function formatDate(d) {
 .action-btn.danger:hover { border-color:#ef4444; color:#ef4444; background:#fef2f2; }
 .tag-sm { font-size:10.5px; background:#f1f5f9; color:#475569; border-radius:20px; padding:1px 8px; }
 .tag-more { font-size:10.5px; color:#94a3b8; padding:1px 4px; }
+.card-desc { font-size:11px; color:#64748b; line-height:1.4; margin-top:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:30px; }
 
 /* Buttons */
 .btn-primary-sm { display:inline-flex; align-items:center; gap:5px; background:#1a56db; color:white; border:none; border-radius:9px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all .13s; }
