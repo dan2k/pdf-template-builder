@@ -1,16 +1,24 @@
 <template>
   <div class="generate-layout">
-    <header class="app-header">
-      <div class="d-flex align-items-center gap-3">
-        <router-link :to="canEdit ? `/editor/${templateId}` : '/'" class="btn btn-sm btn-outline-secondary">
-          <i class="bi bi-arrow-left me-1"></i>{{ canEdit ? 'Back to Editor' : 'Back to Dashboard' }}
+    <header class="app-header navbar navbar-dark bg-primary shadow-sm px-4">
+      <div class="d-flex align-items-center">
+        <router-link class="navbar-brand d-flex align-items-center me-0" to="/">
+           <i class="bi bi-file-earmark-pdf-fill me-2"></i>
+           <span class="fw-bold">PDF Template System</span>
         </router-link>
-        <div class="logo">
-          <i class="bi bi-file-earmark-arrow-down-fill text-success"></i>
-          <span>Generate PDF</span>
+        
+        <div class="vr mx-3 text-white opacity-25" style="height: 24px;"></div>
+
+        <div class="d-flex align-items-center gap-2">
+          <router-link :to="canEdit ? `/editor/${templateId}` : '/'" class="nav-link text-white opacity-75 hover-white px-2">
+            <i class="bi bi-arrow-left me-1"></i>{{ canEdit ? 'Back to Editor' : 'Back to Dashboard' }}
+          </router-link>
+          <span class="nav-link text-white fw-bold px-2">
+            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>Generate PDF
+          </span>
         </div>
       </div>
-      <router-link to="/" class="btn btn-sm btn-ghost">
+      <router-link to="/" class="btn btn-sm btn-light fw-bold px-3">
         <i class="bi bi-house me-1"></i>Home
       </router-link>
     </header>
@@ -329,31 +337,41 @@ function copyApiExample() {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  background: #111827;
+  color: #f1f5f9;
 }
 
 .app-header {
-  height: var(--header-height);
-  background: white;
-  border-bottom: 1px solid var(--gray-200);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
+  height: 56px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
+  z-index: 100;
 }
 
-.logo {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 16px; font-weight: 700;
+.navbar-brand {
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
 }
-.logo i { font-size: 20px; }
+
+.hover-white:hover {
+  opacity: 1 !important;
+  color: white !important;
+}
+
+.nav-link {
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
 
 .btn-ghost {
   background: transparent; border: none;
-  color: var(--gray-600); padding: 4px 8px; border-radius: 6px;
+  color: #94a3b8; padding: 6px 12px; border-radius: 8px;
+  display: flex; align-items: center;
 }
-.btn-ghost:hover { background: var(--gray-100); }
+.btn-ghost:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
+
+.btn-outline-secondary { border-color: #334155; color: #94a3b8; }
+.btn-outline-secondary:hover { border-color: #475569; background: #1e293b; color: #f8fafc; }
 
 .generate-body {
   flex: 1;
@@ -365,18 +383,37 @@ function copyApiExample() {
 .generate-main {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
-  max-width: 700px;
+  padding: 32px;
+  max-width: 800px;
+}
+
+.card {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid #334155 !important;
+  border-radius: 16px;
+  color: #f1f5f9;
+}
+
+.card-header {
+  background: rgba(0,0,0,0.2) !important;
+  border-bottom: 1px solid #334155 !important;
+  color: #f8fafc !important;
+  padding: 14px 20px;
 }
 
 .template-icon {
-  width: 48px; height: 48px;
-  background: #fee2e2;
-  border-radius: 10px;
+  width: 54px; height: 54px;
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  color: #dc2626;
-  font-size: 22px;
+  color: #f87171;
+  font-size: 24px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
+
+.text-muted { color: #94a3b8 !important; }
+.bg-white { background: transparent !important; }
 
 .json-editor-wrap {
   background: #1e1e2e;
@@ -398,33 +435,40 @@ function copyApiExample() {
 }
 
 .api-code {
-  background: var(--gray-900);
-  color: #a5f3fc;
-  padding: 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: monospace;
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 16px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', monospace;
   overflow-x: auto;
   white-space: pre;
   margin: 0;
+  border: 1px solid #1e293b;
 }
 
 .preview-panel {
   width: 50%;
-  border-left: 1px solid var(--gray-200);
+  border-left: 1px solid #1e293b;
   display: flex;
   flex-direction: column;
-  background: var(--gray-50);
+  background: #0f172a;
 }
 
 .preview-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  background: white;
-  border-bottom: 1px solid var(--gray-200);
+  padding: 12px 20px;
+  background: #111827;
+  border-bottom: 1px solid #1e293b;
+  color: #f1f5f9;
 }
+
+.toolbar-btn {
+  background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;
+}
+.toolbar-btn:hover { color: #f1f5f9; }
 
 .pdf-frame {
   flex: 1;
@@ -432,5 +476,16 @@ function copyApiExample() {
   width: 100%;
 }
 
-code { font-size: 12px; background: var(--gray-100); padding: 2px 6px; border-radius: 4px; }
+.table { color: #e2e8f0; }
+.table thead th { background: rgba(0,0,0,0.3); color: #94a3b8; border-bottom: 1px solid #334155; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 16px; }
+.table tbody td { border-bottom: 1px solid #1e293b; padding: 12px 16px; }
+code { font-size: 12px; background: #1e293b; color: #60a5fa; padding: 2px 6px; border-radius: 4px; }
+
+.btn-success { background: #059669; border: none; padding: 10px; font-weight: 600; border-radius: 10px; }
+.btn-success:hover { background: #047857; }
+.btn-outline-primary { border-color: #3b82f6; color: #3b82f6; padding: 10px; font-weight: 600; border-radius: 10px; }
+.btn-outline-primary:hover { background: rgba(59, 130, 246, 0.1); }
+
+.bg-light { background: #1e293b !important; border: 1px solid #334155 !important; }
+.text-dark { color: #f8fafc !important; }
 </style>
