@@ -11,6 +11,7 @@ import { join } from 'path';
 import { CategoriesModule } from './categories/categories.module';
 import { AiModule } from './ai/ai.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { SettingsModule } from './settings/settings.module';
 import { ActivityLogsModule } from './activity-logs/activity-logs.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -37,6 +38,7 @@ import { APP_GUARD } from '@nestjs/core';
     UsersModule,
     DepartmentsModule,
     ApiKeysModule,
+    SettingsModule,
     ActivityLogsModule,
   ],
   providers: [

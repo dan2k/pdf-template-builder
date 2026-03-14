@@ -95,7 +95,66 @@
         </div>
       </div>
     </div>
-    
+
+    <div class="row w-100 max-w-6xl mx-auto mt-4 px-3 mb-5">
+      <!-- AI Settings Section -->
+      <div class="col-12">
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white border-bottom-0 pt-4 pb-0 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">AI Assistant Configuration</h5>
+            <button class="btn btn-primary" @click="saveAiProviders" :disabled="aiSaving">
+              <span v-if="aiSaving" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="bi bi-cloud-check me-1"></i> Save All AI Config
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th width="50">Active</th>
+                    <th width="180">Provider</th>
+                    <th>API Key / URL Config</th>
+                    <th width="200">Default Model</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in aiProviders" :key="p.id">
+                    <td class="text-center">
+                      <div class="form-check d-flex justify-content-center">
+                        <input class="form-check-input" type="radio" :value="p.id" v-model="activeProviderId" @change="updateActiveFlag">
+                      </div>
+                    </td>
+                    <td>
+                      <div class="fw-bold">{{ p.name }}</div>
+                      <div class="text-xs text-muted">{{ p.id }}</div>
+                    </td>
+                    <td>
+                      <div class="mb-2" v-if="p.id !== 'local'">
+                        <label class="text-xs fw-bold text-muted mb-1">API Key</label>
+                        <input v-model="p.apiKey" type="password" class="form-control form-control-sm" placeholder="sk-...">
+                      </div>
+                      <div v-if="p.id === 'openai' || p.id === 'local'">
+                        <label class="text-xs fw-bold text-muted mb-1">Base URL / Endpoint</label>
+                        <input v-model="p.baseUrl" type="text" class="form-control form-control-sm" :placeholder="p.id === 'local' ? 'http://localhost:11434/api/generate' : 'https://api.openai.com/v1'">
+                      </div>
+                    </td>
+                    <td>
+                      <input v-model="p.modelName" type="text" class="form-control form-control-sm" placeholder="e.g. gpt-4o">
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-3 text-xs text-muted bg-light p-2 rounded">
+              <i class="bi bi-info-circle-fill me-1 text-primary"></i> 
+              เลือก <strong>Active</strong> เพื่อกำหนดว่าต้องการใช้ค่ายไหนเป็นตัวหลักในหน้าการออกแบบ (Editor) โดย API Key จะถูกส่งจาก Server อย่างปลอดภัย
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Modals -->
     <Teleport to="body">
       <!-- Dept Modal -->
@@ -176,7 +235,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import api, { usersApi } from '../api'
+import api, { usersApi, settingsApi } from '../api'
 
 const authStore = useAuthStore()
 const users = ref([])
@@ -189,14 +248,41 @@ const showUserModal = ref(false)
 const userForm = ref({ id: null, username: '', password: '', role: 'user', isActive: true, departmentId: null })
 const userFormError = ref('')
 
+// AI Settings multi-provider
+const aiProviders = ref([
+  { id: 'gemini',     name: 'Google Gemini',    apiKey: '', modelName: '', isActive: true },
+  { id: 'openrouter', name: 'OpenRouter',       apiKey: '', modelName: '', isActive: false },
+  { id: 'openai',     name: 'OpenAI/DeepSeek',  apiKey: '', modelName: '', baseUrl: '', isActive: false },
+  { id: 'anthropic',  name: 'Anthropic Claude', apiKey: '', modelName: '', isActive: false },
+  { id: 'local',      name: 'Local LLM',        apiKey: '', modelName: '', baseUrl: '', isActive: false }
+])
+const activeProviderId = ref('gemini')
+const aiSaving = ref(false)
+
+function updateActiveFlag() {
+  aiProviders.value.forEach(p => {
+    p.isActive = (p.id === activeProviderId.value)
+  })
+}
+
 async function loadData() {
   try {
-    const [uRes, dRes] = await Promise.all([
+    const [uRes, dRes, sRes] = await Promise.all([
       api.get('/users'),
-      api.get('/departments')
+      api.get('/departments'),
+      settingsApi.getProviders()
     ])
     users.value = uRes.data
     departments.value = dRes.data
+    
+    if (sRes.data && sRes.data.length > 0) {
+      // Merge with default list to ensure all providers are shown even if not in DB yet
+      aiProviders.value = aiProviders.value.map(def => {
+        const saved = sRes.data.find(s => s.id === def.id)
+        return saved ? { ...def, ...saved } : def
+      })
+      activeProviderId.value = aiProviders.value.find(p => p.isActive)?.id || 'gemini'
+    }
   } catch (err) {
     console.error('Failed to load admin data', err)
   }
@@ -295,13 +381,26 @@ async function resetUserPassword(user) {
     alert(err.response?.data?.message || 'Failed to reset password')
   }
 }
+
+async function saveAiProviders() {
+  aiSaving.value = true
+  try {
+    await settingsApi.saveProviders(aiProviders.value)
+    alert('AI Provider settings saved successfully!')
+  } catch (err) {
+    alert(err.response?.data?.message || 'Failed to save settings')
+  } finally {
+    aiSaving.value = false
+  }
+}
 </script>
 
 <style scoped>
 .admin-container {
   padding: 2rem 0;
   background-color: #f8fafc;
-  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
+  overflow-y: auto;
 }
 .admin-header {
   text-align: center;

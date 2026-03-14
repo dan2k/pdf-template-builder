@@ -10,8 +10,10 @@ export class AiController {
     async transformTemplate(
         @Body('prompt') prompt: string,
         @Body('elements') elements: any[] = [],
+        @Body('provider') provider?: string,
+        @Body('model') model?: string,
     ) {
-        const result = await this.aiService.transformTemplate(prompt, elements);
+        const result = await this.aiService.transformTemplate(prompt, elements, provider, model);
         return { success: true, elements: result };
     }
 }

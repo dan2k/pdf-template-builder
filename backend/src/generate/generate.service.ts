@@ -140,33 +140,55 @@ class ElementRenderer {
     if (opacity < 1) doc.opacity(opacity);
 
     try {
+      let buffer: Buffer | null = null;
+      let contentType: string | null = null;
+
       if (src.startsWith('data:')) {
-        const b64 = src.includes(',') ? src.split(',')[1] : src;
-        doc.image(Buffer.from(b64, 'base64'), opts);
+        const parts = src.split(',');
+        const meta = parts[0];
+        const b64 = parts[1];
+        buffer = Buffer.from(b64, 'base64');
+        if (meta.includes('image/svg+xml')) contentType = 'image/svg+xml';
       }
       else if (isBase64Image(src)) {
-        doc.image(Buffer.from(src, 'base64'), opts);
+        buffer = Buffer.from(src, 'base64');
       }
       else if (src.startsWith('http')) {
-        let buffer = this.imageCache.get(src);
+        buffer = this.imageCache.get(src) || null;
         if (!buffer) {
           const resp = await fetch(src);
           if (resp.ok) {
+            contentType = resp.headers.get('content-type');
             buffer = Buffer.from(await resp.arrayBuffer());
             this.imageCache.set(src, buffer);
           }
         }
-        if (buffer) doc.image(buffer, opts);
       }
       else if (src.startsWith('/uploads/')) {
         const fp = path.join(process.cwd(), src);
-        if (fs.existsSync(fp)) doc.image(fp, opts);
+        if (fs.existsSync(fp)) buffer = fs.readFileSync(fp);
       }
       else if (fs.existsSync(src)) {
-        doc.image(src, opts);
+        buffer = fs.readFileSync(src);
+      }
+
+      if (buffer) {
+        // --- Sharp conversion logic for non-native formats ---
+        const isSvg = (contentType === 'image/svg+xml') || src.toLowerCase().endsWith('.svg') || buffer.slice(0, 100).toString().includes('<svg');
+
+        if (isSvg) {
+          const sharp = require('sharp');
+          buffer = await sharp(buffer)
+            .png()
+            .toBuffer();
+        }
+
+        doc.image(buffer, opts);
+      } else {
+        console.warn('[GenerateService] Image not found or failed to fetch:', src.substring(0, 50));
       }
     } catch (e) {
-      console.warn('Image error:', src.substring(0, 50), (e as any).message);
+      console.error('[GenerateService] Exception in renderImage:', (e as any).message, src.substring(0, 100));
     }
 
     if (el.borderColor && el.borderWidth) {

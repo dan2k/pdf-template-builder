@@ -89,7 +89,14 @@ export const importApi = {
 }
 
 export const aiApi = {
-  transform: (prompt, elements) => api.post('/ai/transform', { prompt, elements })
+  transform: (prompt, elements, provider, model) => api.post('/ai/transform', { prompt, elements, provider, model })
+}
+
+export const settingsApi = {
+  getAi: () => api.get('/settings/ai'),
+  saveAi: (data) => api.post('/settings/ai', data),
+  getProviders: () => api.get('/settings/ai/providers'),
+  saveProviders: (data) => api.post('/settings/ai/providers', data)
 }
 
 export default api

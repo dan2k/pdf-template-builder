@@ -36,15 +36,12 @@ Frontend จะรันที่ http://localhost:5173
 
 ## ⚙️ Configuration & Customization
 
-### 1. API Configuration (.env)
-ระบบใช้ Google Generative AI (Gemini) สำหรับฟีเจอร์ AI Assistant โปรดสร้างไฟล์ `.env` ในโฟลเดอร์ `backend` และเพิ่ม API Key ดังนี้:
-
-```env
-# backend/.env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
-```
-> [!NOTE]
-> หากไม่ได้ระบุ Key ฟีเจอร์ AI Assistant จะไม่สามารถใช้งานได้
+### 1. AI Assistant & Multi-LLM Configuration
+ระบบรองรับการเชื่อมต่อกับ AI Model หลายค่าย (Gemini, ChatGPT, Claude, OpenRouter, etc.) โดยสามารถตั้งค่าทั้งหมดได้ผ่าน **Admin Panel** ในหน้าเว็บ:
+- **API Keys & Models**: กำหนด API Key และชื่อรุ่นของแต่ละค่ายได้โดยตรง (รองรับ Claude 3.5 Sonnet, GPT-4o, Gemini 1.5 และอื่นๆ)
+- **Real-time Switching**: เลือกค่ายที่ต้องการใช้งาน (Active) และบันทึกเพื่อเปลี่ยนผลทั้งระบบทันที โดยไม่ต้อง Restart Server
+- **Robust Image Rendering**: ระบบรองรับการนำเข้ารูปภาพผ่าน URL ทุกรูปแบบ รวมถึงไฟล์ **SVG** และ **WebP** โดยจะถูกแปลงเป็น PNG อัตโนมัติในไฟล์ PDF
+- **.env fallback**: ระบบยังคงรองรับค่าเริ่มต้นจาก `.env` หากไม่มีการตั้งค่าในฐานข้อมูล
 
 ### 2. Adding Custom Fonts
 ระบบรองรับการเพิ่มฟอนต์ได้ 2 วิธี:

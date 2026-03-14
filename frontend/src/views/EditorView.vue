@@ -674,14 +674,11 @@ async function runAi() {
   
   aiLoading.value = true
   try {
-    console.log('calling AI API...')
     const rawElements = JSON.parse(JSON.stringify(store.currentPage.elements))
     const res = await aiApi.transform(aiPrompt.value, rawElements)
     console.log('AI API response:', res.data)
     
     if (res.data && res.data.elements) {
-      // Create a unified history step (Undo/Redo) by updating entire page elements
-      const oldEls = [...store.currentPage.elements]
       store.currentPage.elements = res.data.elements
       
       store.history.splice(store.historyIndex + 1)
@@ -1828,6 +1825,30 @@ function getElemPreviewStyle(el, config) {
 .ai-body {
   padding: 16px;
   background: white;
+}
+.ai-settings {
+  padding: 8px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.ai-label-xs {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  display: block;
+  margin-bottom: 2px;
+}
+.form-select-xs {
+  padding: 2px 4px;
+  font-size: 11px;
+  height: 28px;
+}
+.form-control-xs {
+  padding: 2px 6px;
+  font-size: 11px;
+  height: 28px;
 }
 .ai-desc {
   font-size: 12px;
