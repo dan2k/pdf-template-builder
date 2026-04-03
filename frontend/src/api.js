@@ -69,6 +69,10 @@ export const uploadApi = {
 
 export const fontsApi = {
   getAll: () => api.get('/fonts'),
+  getAllAdmin: () => api.get('/fonts/all'),
+  toggleVisibility: (key, hidden) => api.patch(`/fonts/${key}/visibility`, { hidden }),
+  deleteFont: (key) => api.delete(`/fonts/${key}`),
+  reloadFonts: () => api.post('/fonts/reload'),
   uploadFont: (file) => {
     const formData = new FormData()
     formData.append('file', file)

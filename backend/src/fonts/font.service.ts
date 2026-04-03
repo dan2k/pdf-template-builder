@@ -69,6 +69,7 @@ export class FontService implements OnModuleInit {
     this.fontsDir = this.resolveFontsDir();
     if (!fs.existsSync(this.fontsDir)) fs.mkdirSync(this.fontsDir, { recursive: true });
     this.loadFonts();
+    this.loadHiddenConfig();
     this.logger.log(`Fonts dir: ${this.fontsDir}`);
     this.logger.log(`Loaded fonts: ${this.availableFonts.map(f => f.key).join(', ')}`);
   }
@@ -162,6 +163,69 @@ export class FontService implements OnModuleInit {
 
   getFonts(): FontFamily[] { return this.availableFonts; }
   getFontsDir(): string    { return this.fontsDir; }
+
+  /** Get fonts filtered by hidden state */
+  getVisibleFonts(): FontFamily[] {
+    return this.availableFonts.filter(f => !(f as any).hidden);
+  }
+
+  /** Set hidden flag on a font */
+  setFontVisibility(key: string, hidden: boolean): boolean {
+    const font = this.availableFonts.find(f => f.key === key);
+    if (!font) return false;
+    (font as any).hidden = hidden;
+    this.saveHiddenConfig();
+    return true;
+  }
+
+  /** Delete a custom font (not builtin) */
+  deleteFont(key: string): boolean {
+    const idx = this.availableFonts.findIndex(f => f.key === key);
+    if (idx === -1) return false;
+    const font = this.availableFonts[idx];
+    // Don't allow deleting builtin fonts
+    if (BUILTIN_FONTS.some(b => b.key === key)) return false;
+    // Delete font files
+    for (const v of font.variants) {
+      if (v.file && v.file.includes(this.fontsDir)) {
+        try { fs.unlinkSync(v.file); } catch {}
+      }
+    }
+    this.availableFonts.splice(idx, 1);
+    this.saveHiddenConfig();
+    return true;
+  }
+
+  /** Reload fonts from disk */
+  reloadFonts() {
+    this.loadFonts();
+    this.loadHiddenConfig();
+    this.logger.log(`Reloaded fonts: ${this.availableFonts.map(f => f.key).join(', ')}`);
+  }
+
+  private getHiddenConfigPath(): string {
+    return path.join(this.fontsDir, '.font-config.json');
+  }
+
+  private loadHiddenConfig() {
+    try {
+      const configPath = this.getHiddenConfigPath();
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const hiddenKeys: string[] = config.hidden || [];
+        for (const font of this.availableFonts) {
+          (font as any).hidden = hiddenKeys.includes(font.key);
+        }
+      }
+    } catch {}
+  }
+
+  private saveHiddenConfig() {
+    try {
+      const hiddenKeys = this.availableFonts.filter(f => (f as any).hidden).map(f => f.key);
+      fs.writeFileSync(this.getHiddenConfigPath(), JSON.stringify({ hidden: hiddenKeys }, null, 2));
+    } catch {}
+  }
 
   resolveFont(fontKey: string, weight: string, style: string): string {
     const family = this.availableFonts.find(f => f.key === fontKey);

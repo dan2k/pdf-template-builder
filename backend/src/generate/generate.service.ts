@@ -4,7 +4,7 @@ import { FontService } from '../fonts/font.service';
 import {
   TemplatePage, TemplateElement, TextElement,
   ImageElement, TableElement, ShapeElement, DividerElement, BarcodeElement, PageConfig,
-  HeaderFooterConfig, PageNumberConfig,
+  HeaderFooterConfig, PageNumberConfig, RichBlock, ListBlock, ListItem,
 } from '../templates/template.entity';
 import * as PDFDocument from 'pdfkit';
 import * as fs from 'fs';
@@ -47,7 +47,13 @@ class ElementRenderer {
   async render(el: TemplateElement, data: Record<string, any>, offsetY = 0) {
     const s = { ...el, y: el.y + offsetY } as any;
     switch (el.type) {
-      case 'text': this.renderText(s, data); break;
+      case 'text':
+        if ((s as TextElement).richMode && (s as TextElement).richContent?.length) {
+          this.renderRichText(s, data);
+        } else {
+          this.renderText(s, data);
+        }
+        break;
       case 'image': await this.renderImage(s, data); break;
       case 'shape': this.renderShape(s); break;
       case 'divider': this.renderDivider(s); break;
@@ -67,6 +73,298 @@ class ElementRenderer {
       };
       await this.render(resolved as TemplateElement, data, 0);
     }
+  }
+
+  renderRichText(el: TextElement, data: Record<string, any>) {
+    const { doc, fontSvc } = this;
+    const blocks: RichBlock[] = el.richContent || [];
+
+    const padT = el.paddingTop ?? el.padding ?? 0;
+    const padR = el.paddingRight ?? el.padding ?? 0;
+    const padB = el.paddingBottom ?? el.padding ?? 0;
+    const padL = el.paddingLeft ?? el.padding ?? 0;
+
+    // Draw background & border (same as renderText)
+    if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+      const [r, g, b] = hexToRgb(el.backgroundColor);
+      if (el.borderRadius) doc.roundedRect(el.x, el.y, el.width, el.height, el.borderRadius).fill([r, g, b]);
+      else doc.rect(el.x, el.y, el.width, el.height).fill([r, g, b]);
+    }
+    if (el.borderColor && el.borderWidth) {
+      const [r, g, b] = hexToRgb(el.borderColor);
+      if (el.borderRadius) doc.roundedRect(el.x, el.y, el.width, el.height, el.borderRadius).lineWidth(el.borderWidth).stroke([r, g, b]);
+      else doc.rect(el.x, el.y, el.width, el.height).lineWidth(el.borderWidth).stroke([r, g, b]);
+    }
+
+    const opacity = el.opacity ?? 1;
+    if (opacity < 1) doc.opacity(opacity);
+
+    const contentWidth = el.width - padL - padR;
+    let curY = el.y + padT;
+    const maxY = el.y + el.height - padB;
+    const baseFontSize = el.fontSize || 12;
+    const baseColor = el.color || '#000000';
+    const baseFontFamily = el.fontFamily || 'Helvetica';
+    const baseAlign = el.align || 'left';
+    const lineGap = el.lineHeight ? (el.lineHeight - 1) * baseFontSize : 0;
+
+    const HEADING_SIZES = { 1: 1.8, 2: 1.4, 3: 1.15 };
+    const INDENT_PX = 20;
+
+    // ── Marker helpers ──────────────────────────────────────────────────────
+    const UNORDERED_MARKERS: Record<string, string[]> = {
+      disc:   ['●', '○', '■'],
+      circle: ['○', '◦', '▪'],
+      square: ['■', '▪', '▫'],
+      dash:   ['–', '–', '–'],
+      arrow:  ['▸', '▹', '▸'],
+      check:  ['✓', '✓', '✓'],
+    };
+
+    const toRoman = (n: number, upper: boolean): string => {
+      const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
+      const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+      let r = ''; for (let i = 0; i < vals.length; i++) { while (n >= vals[i]) { r += syms[i]; n -= vals[i]; } }
+      return upper ? r : r.toLowerCase();
+    };
+
+    const toAlpha = (n: number, upper: boolean): string => {
+      let r = ''; while (n > 0) { n--; r = String.fromCharCode(65 + (n % 26)) + r; n = Math.floor(n / 26); }
+      return upper ? r : r.toLowerCase();
+    };
+
+    const THAI_DIGITS = ['๐','๑','๒','๓','๔','๕','๖','๗','๘','๙'];
+    const toThai = (n: number): string => String(n).split('').map(d => THAI_DIGITS[+d]).join('');
+
+    const isOrdered = (s: string) => ['decimal','decimal-zero','lower-alpha','upper-alpha','lower-roman','upper-roman','thai'].includes(s);
+
+    const getOrderedMarker = (style: string, num: number): string => {
+      switch (style) {
+        case 'decimal':      return `${num}.`;
+        case 'decimal-zero': return `${String(num).padStart(2, '0')}.`;
+        case 'lower-alpha':  return `${toAlpha(num, false)}.`;
+        case 'upper-alpha':  return `${toAlpha(num, true)}.`;
+        case 'lower-roman':  return `${toRoman(num, false)}.`;
+        case 'upper-roman':  return `${toRoman(num, true)}.`;
+        case 'thai':         return `${toThai(num)}.`;
+        default:             return `${num}.`;
+      }
+    };
+
+    const getUnorderedMarker = (style: string, level: number): string => {
+      const chars = UNORDERED_MARKERS[style] || UNORDERED_MARKERS['disc'];
+      return chars[Math.min(level, chars.length - 1)];
+    };
+
+    for (const block of blocks) {
+      if (curY >= maxY) break;
+
+      const blockIndent = (block.indent || 0) * INDENT_PX;
+      const blockAlign = (block.align || baseAlign) as any;
+      const blockColor = block.color || baseColor;
+      const [cr, cg, cb] = hexToRgb(blockColor);
+      const isBold = block.bold ?? (el.fontWeight === 'bold');
+      const isItalic = block.italic ?? (el.fontStyle === 'italic');
+      const fontWeight = isBold ? 'bold' : 'normal';
+      const fontStyle = isItalic ? 'italic' : 'normal';
+
+      if (block.type === 'heading') {
+        const scale = HEADING_SIZES[block.level] || 1;
+        const fs = Math.round(baseFontSize * scale);
+        const font = fontSvc.resolveFont(baseFontFamily, 'bold', fontStyle);
+        const text = resolveTemplate(block.text || '', data);
+        const blockGap = fs * 0.4;
+
+        doc.font(font).fontSize(fs).fillColor([cr, cg, cb]);
+        doc.text(text, el.x + padL + blockIndent, curY, {
+          width: contentWidth - blockIndent,
+          align: blockAlign,
+          lineGap: lineGap,
+          lineBreak: true,
+        });
+        curY = doc.y + blockGap;
+
+      } else if (block.type === 'list') {
+        const font = fontSvc.resolveFont(baseFontFamily, fontWeight, fontStyle);
+        const listBlock = block as ListBlock;
+        const listStyle = listBlock.style || 'disc';
+        const startNum = listBlock.startNumber || 1;
+        const markerWidth = INDENT_PX;
+
+        // Resolve items: static items or dynamic from data
+        let resolvedItems: ListItem[] = [];
+
+        if (listBlock.dataKey) {
+          // Dynamic binding: pull array from data
+          const arr = listBlock.dataKey.split('.').reduce((o: any, k) => o?.[k], data);
+          if (Array.isArray(arr)) {
+            const tpl = listBlock.itemTemplate || '{{.}}';
+            // checkedKey: resolve which items are checked
+            const checkedSet = new Set<string>();
+            if (listBlock.checkedKey) {
+              const cv = listBlock.checkedKey.split('.').reduce((o: any, k) => o?.[k], data);
+              if (Array.isArray(cv)) cv.forEach((v: any) => checkedSet.add(String(v)));
+            }
+            resolvedItems = arr.map((item: any, idx: number) => {
+              let text: string;
+              let itemChecked = false;
+              if (typeof item === 'string' || typeof item === 'number') {
+                text = tpl.replace(/\{\{\.\}\}/g, String(item));
+                text = resolveTemplate(text, { ...data, item });
+                itemChecked = checkedSet.has(String(item));
+              } else if (typeof item === 'object' && item !== null) {
+                text = resolveTemplate(tpl, { ...data, ...item, item });
+                itemChecked = !!(item.checked ?? (checkedSet.has(String(item.value ?? item.name ?? idx))));
+              } else {
+                text = String(item ?? '');
+              }
+              return { text, indent: 0, checked: itemChecked };
+            });
+          }
+        }
+
+        if (resolvedItems.length === 0) {
+          // Static items (backward compat: items can be string[] or ListItem[])
+          const rawItems = listBlock.items || [];
+          resolvedItems = rawItems.map((it: any) => {
+            if (typeof it === 'string') return { text: resolveTemplate(it, data) || it, indent: 0, checked: false };
+            return { text: resolveTemplate(it.text || '', data) || it.text || '', indent: it.indent || 0, style: it.style, checked: !!it.checked };
+          });
+          // Filter out completely empty items
+          resolvedItems = resolvedItems.filter(it => it.text.trim() !== '');
+        }
+
+        let orderedCounter = startNum;
+
+        // ── Draw unordered marker as vector graphic ─────────────────────────
+        // cy = vertical midpoint of Thai text body (between ascender and baseline)
+        const drawVectorMarker = (style: string, level: number, cx: number, cy: number, size: number, checked = false) => {
+          const r = size / 2;
+          doc.fillColor([cr, cg, cb]);
+          doc.strokeColor([cr, cg, cb]);
+
+          if (style === 'disc') {
+            const radii = [r, r * 0.75, r * 0.55];
+            const rad = radii[Math.min(level, radii.length - 1)];
+            doc.circle(cx, cy, rad).fill([cr, cg, cb]);
+          } else if (style === 'circle') {
+            const rad = r * 0.85;
+            doc.circle(cx, cy, rad).lineWidth(size * 0.12).stroke([cr, cg, cb]);
+          } else if (style === 'square') {
+            const lvlScale = [0.85, 0.65, 0.5];
+            const sc = lvlScale[Math.min(level, lvlScale.length - 1)];
+            const ss = size * sc;
+            doc.rect(cx - ss / 2, cy - ss / 2, ss, ss).fill([cr, cg, cb]);
+          } else if (style === 'dash') {
+            const w = size * 1.0;
+            doc.moveTo(cx - w / 2, cy).lineTo(cx + w / 2, cy).lineWidth(size * 0.15).stroke([cr, cg, cb]);
+          } else if (style === 'arrow') {
+            const s = size * 0.75;
+            doc.moveTo(cx - s / 3, cy - s / 2)
+              .lineTo(cx + s / 2, cy)
+              .lineTo(cx - s / 3, cy + s / 2)
+              .closePath().fill([cr, cg, cb]);
+          } else if (style === 'check') {
+            const fs = baseFontSize;
+            const lw = Math.max(0.7, fs * 0.055);
+            doc.moveTo(cx - fs * 0.2, cy + fs * 0.02)
+              .lineTo(cx - fs * 0.02, cy + fs * 0.3)
+              .lineTo(cx + fs * 0.25, cy - fs * 0.3)
+              .lineWidth(lw)
+              .lineJoin('round')
+              .lineCap('round')
+              .stroke([cr, cg, cb]);
+            doc.lineJoin('miter').lineCap('butt');
+          } else if (style === 'checkbox') {
+            const fs = baseFontSize;
+            const boxSize = fs * 0.6;
+            const bx = cx - boxSize / 2;
+            const by = cy - boxSize / 2;
+            const lw = Math.max(0.7, fs * 0.045);
+            // Draw box
+            doc.rect(bx, by, boxSize, boxSize).lineWidth(lw).stroke([cr, cg, cb]);
+            // Draw checkmark inside if checked
+            if (checked) {
+              const m = boxSize * 0.18;
+              const clw = Math.max(1, fs * 0.07);
+              doc.moveTo(bx + m, cy + boxSize * 0.02)
+                .lineTo(bx + boxSize * 0.4, by + boxSize - m)
+                .lineTo(bx + boxSize - m, by + m)
+                .lineWidth(clw)
+                .lineJoin('round')
+                .lineCap('round')
+                .stroke([cr, cg, cb]);
+              doc.lineJoin('miter').lineCap('butt');
+            }
+          } else if (style === 'radio') {
+            const fs = baseFontSize;
+            const outerR = fs * 0.3;
+            const lw = Math.max(0.7, fs * 0.045);
+            // Draw outer circle
+            doc.circle(cx, cy, outerR).lineWidth(lw).stroke([cr, cg, cb]);
+            // Draw filled inner circle if checked
+            if (checked) {
+              const innerR = outerR * 0.5;
+              doc.circle(cx, cy, innerR).fill([cr, cg, cb]);
+            }
+          }
+        };
+
+        for (let i = 0; i < resolvedItems.length; i++) {
+          if (curY >= maxY) break;
+          const item = resolvedItems[i];
+          const itemLevel = (block.indent || 0) + (item.indent || 0);
+          const itemIndent = itemLevel * INDENT_PX;
+          const itemStyle = item.style || listStyle;
+
+          if (isOrdered(itemStyle)) {
+            const marker = getOrderedMarker(itemStyle, orderedCounter);
+            orderedCounter++;
+            doc.font(font).fontSize(baseFontSize).fillColor([cr, cg, cb]);
+            doc.text(marker, el.x + padL + itemIndent, curY, {
+              width: markerWidth,
+              align: 'right' as any,
+              lineBreak: false,
+              continued: false,
+            });
+          } else {
+            // All markers: cy at vertical center of Thai text x-height
+            const markerSize = baseFontSize * 0.55;
+            const markerCx = el.x + padL + itemIndent + markerWidth - markerSize * 0.5;
+            const markerCy = curY + baseFontSize * 0.78;
+            drawVectorMarker(itemStyle, itemLevel, markerCx, markerCy, markerSize, !!(item as any).checked);
+          }
+
+          // Render item text with the user's chosen font
+          doc.font(font).fontSize(baseFontSize).fillColor([cr, cg, cb]);
+          doc.text(item.text, el.x + padL + itemIndent + markerWidth + 4, curY, {
+            width: contentWidth - itemIndent - markerWidth - 4,
+            align: blockAlign,
+            lineGap: lineGap,
+            lineBreak: true,
+          });
+          curY = doc.y + 2;
+        }
+        curY += baseFontSize * 0.3;
+
+      } else {
+        // paragraph
+        const font = fontSvc.resolveFont(baseFontFamily, fontWeight, fontStyle);
+        const text = resolveTemplate((block as any).text || '', data);
+
+        doc.font(font).fontSize(baseFontSize).fillColor([cr, cg, cb]);
+        doc.text(text, el.x + padL + blockIndent, curY, {
+          width: contentWidth - blockIndent,
+          align: blockAlign,
+          lineGap: lineGap,
+          paragraphGap: el.paragraphGap || 0,
+          lineBreak: true,
+        });
+        curY = doc.y + (el.paragraphGap || baseFontSize * 0.3);
+      }
+    }
+
+    if (opacity < 1) doc.opacity(1);
   }
 
   renderText(el: TextElement, data: Record<string, any>) {
@@ -384,27 +682,43 @@ class PageRenderer {
     const pdfPageRefs: number[] = [rangeStart];
     let pdfPageCount = 1;
 
-    const sorted = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-    const tables = sorted.filter(e => e.type === 'table') as TableElement[];
-    const statics = sorted.filter(e => e.type !== 'table');
+    const sorted = [...elements].sort((a, b) => (a.y || 0) - (b.y || 0) || (a.zIndex || 0) - (b.zIndex || 0));
+    // Flow tables = tables with dataKey (dynamic data, can overflow pages)
+    const flowTables = sorted.filter(e => e.type === 'table' && (e as TableElement).dataKey) as TableElement[];
+    // Everything else (including static tables) renders at fixed position
+    const fixedEls = sorted.filter(e => !(e.type === 'table' && (e as TableElement).dataKey));
 
-    if (tables.length === 0) {
-      for (const el of statics) await this.drawAt(el, el.y, data);
+    if (flowTables.length === 0) {
+      // No flow tables — render everything at fixed Y
+      for (const el of sorted) {
+        if (el.type === 'table') {
+          this.renderFlowTable(el as TableElement, data, drawBg, marginTop, marginBottom, pdfPageRefs);
+        } else {
+          await this.drawAt(el, el.y, data);
+        }
+      }
     } else {
-      const flowTable = tables.reduce((a, b) => a.y <= b.y ? a : b);
+      const flowTable = flowTables.reduce((a, b) => a.y <= b.y ? a : b);
       const tableTop = flowTable.y;
 
-      for (const el of statics.filter(e => (e.y + e.height) <= tableTop || (e.y <= tableTop && e.y + e.height > tableTop))) {
-        await this.drawAt(el, el.y, data);
+      // Render fixed elements ABOVE the first flow table
+      for (const el of fixedEls.filter(e => e.y < tableTop)) {
+        if (el.type === 'table') {
+          this.renderFlowTable(el as TableElement, data, drawBg, marginTop, marginBottom, pdfPageRefs);
+        } else {
+          await this.drawAt(el, el.y, data);
+        }
       }
 
+      // Render flow tables
       let lastResult = { finalY: tableTop, overflowed: false, pagesAdded: 0 };
-      for (const table of tables) {
+      for (const table of flowTables) {
         lastResult = this.renderFlowTable(table, data, drawBg, marginTop, marginBottom, pdfPageRefs);
         pdfPageCount += lastResult.pagesAdded;
       }
 
-      for (const el of statics.filter(e => e.y > tableTop)) {
+      // Render fixed elements BELOW the first flow table (shifted by flow)
+      for (const el of fixedEls.filter(e => e.y >= tableTop)) {
         const gap = el.y - (flowTable.y + flowTable.height);
         let drawY = lastResult.finalY + Math.max(0, gap);
         if (drawY + el.height > ph - marginBottom) {
@@ -414,7 +728,15 @@ class PageRenderer {
           pdfPageRefs.push(doc.bufferedPageRange().start + doc.bufferedPageRange().count - 1);
           drawY = marginTop;
         }
-        await this.drawAt(el, drawY, data);
+        if (el.type === 'table') {
+          // Static table below flow table
+          const savedY = (el as any).y;
+          (el as any).y = drawY;
+          this.renderFlowTable(el as TableElement, data, drawBg, marginTop, marginBottom, pdfPageRefs);
+          (el as any).y = savedY;
+        } else {
+          await this.drawAt(el, drawY, data);
+        }
       }
     }
 
@@ -446,7 +768,8 @@ class PageRenderer {
   ): { finalY: number; overflowed: boolean; pagesAdded: number } {
     const { doc, pw, ph, fontSvc } = this;
     const rows: any[] = el.dataKey
-      ? (el.dataKey.split('.').reduce((o: any, k) => o?.[k], data) || []) : [];
+      ? (el.dataKey.split('.').reduce((o: any, k) => o?.[k], data) || [])
+      : ((el as any).staticRows || []);
     const cols = el.columns || [];
     if (!cols.length) return { finalY: el.y, overflowed: false, pagesAdded: 0 };
 
@@ -651,7 +974,8 @@ export class GenerateService {
     let maxPagesFromTables = 1;
     for (const t of tables) {
       const rows: any[] = t.dataKey
-        ? (t.dataKey.split('.').reduce((o: any, k) => o?.[k], data) || []) : [];
+        ? (t.dataKey.split('.').reduce((o: any, k) => o?.[k], data) || [])
+        : ((t as any).staticRows || []);
       const cellPad = t.cellPadding || 4;
       const fs = t.fontSize || 10;
       const headerH = fs + cellPad * 2 + 4;

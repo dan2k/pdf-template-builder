@@ -240,7 +240,9 @@
       </main>
 
       <!-- Right sidebar: properties panel -->
-      <aside class="props-sidebar">
+      <aside class="props-sidebar" :style="{ width: panelWidth + 'px' }">
+        <!-- Resize handle -->
+        <div class="panel-resize-handle" @mousedown="startPanelResize"></div>
         <!-- Tab switcher -->
         <div class="sidebar-tabs">
           <button class="sidebar-tab" :class="{ active: rightTab === 'props' }" @click="rightTab = 'props'">
@@ -445,18 +447,21 @@
       </aside>
     </div>
 
-    <!-- Preview Modal -->
-    <div class="modal fade" id="previewModal" tabindex="-1">
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h6 class="modal-title">Preview PDF</h6>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body p-0">
-            <iframe v-if="previewUrl" :src="previewUrl" class="preview-iframe"></iframe>
+    <!-- Preview Modal (custom) -->
+    <div v-if="previewUrl" class="editor-preview-bg" @click.self="closePreview">
+      <div class="editor-preview-modal" :class="{ 'editor-preview-fullscreen': previewFullscreen }">
+        <div class="editor-preview-header">
+          <h6 class="m-0 fw-semibold" style="color:#f1f5f9">Preview PDF</h6>
+          <div class="d-flex gap-2 ms-auto align-items-center">
+            <button class="editor-preview-btn" @click="previewFullscreen = !previewFullscreen" :title="previewFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+              <i class="bi" :class="previewFullscreen ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+            </button>
+            <button class="editor-preview-btn" @click="closePreview">
+              <i class="bi bi-x-lg"></i>
+            </button>
           </div>
         </div>
+        <iframe :src="previewUrl" class="editor-preview-iframe"></iframe>
       </div>
     </div>
 
@@ -628,6 +633,28 @@ const zoom         = ref(0.85)
 const zoomStep     = ref(10)   // percent per click
 const arrowStep    = ref(1)    // px per arrow key
 const arrowStepLarge = ref(10) // px per Shift+arrow
+const panelWidth   = ref(300)  // resizable panel width
+
+// ── Panel resize ──────────────────────────────────────────────────────────────
+function startPanelResize(e) {
+  e.preventDefault()
+  const startX = e.clientX
+  const startW = panelWidth.value
+  const onMove = (me) => {
+    const delta = startX - me.clientX
+    panelWidth.value = Math.max(240, Math.min(700, startW + delta))
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
 const showSettings = ref(false)
 
 // Close settings popover on outside click
@@ -659,6 +686,7 @@ function closeMenusOnOutside(e) {
 onMounted(() => { window.addEventListener('click', closeMenusOnOutside) })
 onUnmounted(() => { window.removeEventListener('click', closeMenusOnOutside) })
 const previewUrl = ref('')
+const previewFullscreen = ref(false)
 const canvasArea = ref(null)
 const rightTab = ref('props')
 const showAiPanel  = ref(false)
@@ -746,13 +774,6 @@ function handleKeydown(e) {
 onMounted(async () => {
   try {
     console.log('[EditorView] onMounted started')
-    const modalEl = document.getElementById('previewModal')
-    if (modalEl) {
-      previewModal = new Modal(modalEl)
-      console.log('[EditorView] previewModal initialized')
-    } else {
-      console.warn('[EditorView] previewModal element not found')
-    }
 
     if (route.params.id) {
       try {
@@ -905,19 +926,25 @@ function addSimpleTableElement() {
   store.addElement({
     type: 'table',
     x: ml, y: mt,
-    width: cw, height: 120,
+    width: cw, height: 140,
     columns: [
-      { key: 'col1', label: 'Column 1', width: 50 },
-      { key: 'col2', label: 'Column 2', width: 50 },
+      { key: 'col1', label: 'หัวข้อ 1', width: 33 },
+      { key: 'col2', label: 'หัวข้อ 2', width: 33 },
+      { key: 'col3', label: 'หัวข้อ 3', width: 34 },
     ],
-    dataKey: 'rows',
-    headerBgColor: '#f1f5f9', headerTextColor: '#374151',
-    rowBgColor: '#ffffff', altRowBgColor: '#f8fafc',
-    borderColor: '#e5e7eb', borderWidth: 1,
+    dataKey: '',
+    staticRows: [
+      { col1: 'ข้อมูล A1', col2: 'ข้อมูล A2', col3: 'ข้อมูล A3' },
+      { col1: 'ข้อมูล B1', col2: 'ข้อมูล B2', col3: 'ข้อมูล B3' },
+      { col1: 'ข้อมูล C1', col2: 'ข้อมูล C2', col3: 'ข้อมูล C3' },
+    ],
+    headerBgColor: '#374151', headerTextColor: '#ffffff',
+    rowBgColor: '#ffffff', altRowBgColor: '#f9fafb',
+    borderColor: '#d1d5db', borderWidth: 1,
     fontSize: 10, cellPadding: 5,
-    repeatHeaderOnNewPage: true,
+    repeatHeaderOnNewPage: false,
     showHeader: true,
-    label: 'Simple Grid',
+    label: 'Static Table',
   })
 }
 
@@ -1186,19 +1213,57 @@ async function openPreview() {
 
   try {
     const mockData = {}
+    // Build mock data from declared variables
     if (Array.isArray(store.template.variables)) {
       store.template.variables.forEach(v => {
-        if (v.name) mockData[v.name] = v.defaultValue || ''
+        if (!v.name) return
+        if (v.type === 'array') {
+          try {
+            const parsed = JSON.parse(v.defaultValue)
+            if (Array.isArray(parsed)) { mockData[v.name] = parsed; return }
+          } catch {}
+          mockData[v.name] = ['Sample Item 1', 'Sample Item 2', 'Sample Item 3']
+        } else if (v.type === 'number') {
+          mockData[v.name] = v.defaultValue ? Number(v.defaultValue) : 0
+        } else if (v.type === 'boolean') {
+          mockData[v.name] = v.defaultValue === 'true'
+        } else if (v.type === 'object') {
+          try { mockData[v.name] = JSON.parse(v.defaultValue || '{}') } catch { mockData[v.name] = {} }
+        } else {
+          mockData[v.name] = v.defaultValue || v.name
+        }
       })
     }
+
+    // Auto-generate mock data for table dataKeys not covered by variables
+    const pages = store.template.pages || store.pages || []
+    for (const page of pages) {
+      for (const el of (page.elements || [])) {
+        if (el.type === 'table' && el.dataKey && !mockData[el.dataKey]) {
+          const cols = el.columns || []
+          const sampleRows = []
+          for (let r = 1; r <= 3; r++) {
+            const row = {}
+            cols.forEach(c => { row[c.key] = `${c.label || c.key} ${r}` })
+            sampleRows.push(row)
+          }
+          mockData[el.dataKey] = sampleRows
+        }
+      }
+    }
+
     const res = await generateApi.preview(store.template.id, mockData)
     const blob = new Blob([res.data], { type: 'application/pdf' })
     previewUrl.value = URL.createObjectURL(blob)
-    previewModal?.show()
   } catch (e) {
     console.error(e)
     alert('Error generating preview: ' + e.message)
   }
+}
+
+function closePreview() {
+  previewUrl.value = ''
+  previewFullscreen.value = false
 }
 
 function getPageThumbStyle(config) {
@@ -1573,6 +1638,73 @@ function getElemPreviewStyle(el, config) {
   border: none;
 }
 
+/* Editor Preview Modal */
+.editor-preview-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: edPreviewFadeIn 0.15s ease;
+}
+@keyframes edPreviewFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.editor-preview-modal {
+  background: #1e293b;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+  width: 90vw;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: edPreviewUp 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes edPreviewUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.editor-preview-modal.editor-preview-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.editor-preview-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: #111827;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.editor-preview-btn {
+  width: 32px; height: 32px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.editor-preview-btn:hover {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+.editor-preview-iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+}
+
 /* Sidebar tabs */
 .sidebar-tabs {
   display: flex;
@@ -1635,6 +1767,24 @@ function getElemPreviewStyle(el, config) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.panel-resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+  transition: background 0.15s;
+}
+.panel-resize-handle:hover,
+.panel-resize-handle:active {
+  background: var(--primary);
+  opacity: 0.4;
 }
 
 

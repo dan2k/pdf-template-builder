@@ -46,10 +46,55 @@ export interface BaseElement {
   label?: string;             // editor display name
 }
 
+// ─── RICH CONTENT BLOCKS ─────────────────────────────────────────────────────
+export type RichBlockType = 'paragraph' | 'heading' | 'list';
+
+export interface RichBlockBase {
+  type: RichBlockType;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  indent?: number;            // indent level (0, 1, 2...)
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+export interface ParagraphBlock extends RichBlockBase {
+  type: 'paragraph';
+  text: string;
+}
+
+export interface HeadingBlock extends RichBlockBase {
+  type: 'heading';
+  level: 1 | 2 | 3;
+  text: string;
+}
+
+export interface ListBlock extends RichBlockBase {
+  type: 'list';
+  style: 'disc' | 'circle' | 'square' | 'dash' | 'arrow' | 'check' | 'checkbox' | 'radio' | 'decimal' | 'decimal-zero' | 'lower-alpha' | 'upper-alpha' | 'lower-roman' | 'upper-roman' | 'thai';
+  items: ListItem[];
+  startNumber?: number;
+  dataKey?: string;
+  itemTemplate?: string;
+  checkedKey?: string;        // dynamic binding: key to boolean or array of checked values
+}
+
+export interface ListItem {
+  text: string;
+  indent?: number;
+  style?: ListBlock['style'];
+  checked?: boolean;          // for checkbox/radio: is this item checked?
+}
+
+export type RichBlock = ParagraphBlock | HeadingBlock | ListBlock;
+
 // ─── TEXT ────────────────────────────────────────────────────────────────────
 export interface TextElement extends BaseElement {
   type: 'text';
   content: string;
+  // Rich text mode
+  richMode?: boolean;
+  richContent?: RichBlock[];
   // Typography
   fontSize: number;
   fontFamily: string;
@@ -134,6 +179,7 @@ export interface TableElement extends BaseElement {
   type: 'table';
   columns: TableColumn[];
   dataKey: string;
+  staticRows?: Record<string, any>[];  // static data rows (used when dataKey is empty)
   // Header styling
   headerBgColor: string;
   headerTextColor: string;

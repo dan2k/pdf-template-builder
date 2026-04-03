@@ -205,6 +205,131 @@
 
     <!-- Modals -->
     <Teleport to="body">
+
+      <!-- Font Management Section -->
+    </Teleport>
+
+    <div class="row w-100 max-w-6xl mx-auto px-3 mb-5">
+      <div class="col-12">
+        <div class="glass-card">
+          <div class="card-header-custom border-bottom border-slate-700 pb-3">
+            <h5 class="mb-0 fw-bold text-white"><i class="bi bi-fonts me-2"></i>Font Management</h5>
+            <div class="d-flex gap-2">
+              <button class="btn-primary-sm" @click="$refs.fontFileInput.click()">
+                <i class="bi bi-upload me-1"></i> Upload Font
+              </button>
+              <button class="btn-ghost" @click="reloadFonts" :disabled="fontReloading">
+                <span v-if="fontReloading" class="spinner-border spinner-border-sm me-1"></span>
+                <i v-else class="bi bi-arrow-clockwise me-1"></i> Reload
+              </button>
+              <input ref="fontFileInput" type="file" accept=".ttf,.otf" style="display:none" @change="uploadFont" />
+            </div>
+          </div>
+          <div class="px-3 pt-3">
+            <div class="search-container">
+              <i class="bi bi-search"></i>
+              <input v-model="fontSearch" type="text" class="dark-input-xs" placeholder="ค้นหา font...">
+            </div>
+          </div>
+          <div class="card-body pt-2">
+            <div class="table-responsive">
+              <table class="table table-dark-custom table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th>Font Name</th>
+                    <th>Key</th>
+                    <th>Language</th>
+                    <th>Variants</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="font in filteredFonts" :key="font.key" :class="{ 'opacity-50': font.hidden }">
+                    <td>
+                      <div class="fw-bold text-slate-200">{{ font.name }}</div>
+                      <span v-if="font.isBuiltin" class="badge bg-primary-soft" style="font-size:9px">Builtin</span>
+                    </td>
+                    <td><code style="font-size:11px;background:#0f172a;color:#60a5fa;padding:2px 6px;border-radius:4px">{{ font.key }}</code></td>
+                    <td>
+                      <span class="badge" :class="font.language === 'thai' ? 'bg-success-soft' : font.language === 'both' ? 'bg-warning-soft' : 'bg-primary-soft'" style="font-size:10px">
+                        {{ font.language }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="text-slate-400" style="font-size:11px">
+                        <span v-if="font.hasRegular" title="Regular">R</span>
+                        <span v-if="font.hasBold" title="Bold" class="fw-bold"> B</span>
+                        <span v-if="font.hasItalic" title="Italic" class="fst-italic"> I</span>
+                      </span>
+                    </td>
+                    <td>
+                      <span v-if="!font.hidden" class="text-success-soft"><i class="bi bi-eye-fill me-1"></i>Visible</span>
+                      <span v-else class="text-slate-500"><i class="bi bi-eye-slash me-1"></i>Hidden</span>
+                    </td>
+                    <td class="text-end">
+                      <div class="d-flex justify-content-end gap-1">
+                        <button class="btn-icon-sm" @click="toggleFontVisibility(font)" :title="font.hidden ? 'Show' : 'Hide'">
+                          <i class="bi" :class="font.hidden ? 'bi-eye text-success' : 'bi-eye-slash text-warning'"></i>
+                        </button>
+                        <button class="btn-icon-sm" @click="deleteFont(font)" title="Delete" :disabled="font.isBuiltin">
+                          <i class="bi bi-trash text-danger"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="filteredFonts.length === 0" class="text-center text-slate-500 py-4">
+                No fonts found
+              </div>
+            </div>
+            <div class="mt-3 info-box">
+              <i class="bi bi-info-circle-fill me-2 text-primary"></i>
+              Font ที่ซ่อน (Hidden) จะไม่แสดงใน editor แต่ยังใช้ render PDF ได้ถ้า template เดิมใช้อยู่ Builtin fonts (Helvetica, Times, Courier) ลบไม่ได้
+            </div>
+
+            <!-- Font upload guide -->
+            <div class="mt-3 font-guide">
+              <div class="font-guide-title"><i class="bi bi-book me-1"></i> คำแนะนำการเพิ่ม Font</div>
+              <div class="font-guide-body">
+                <p>ระบบรองรับไฟล์ <code>.ttf</code> และ <code>.otf</code> โดยต้องตั้งชื่อไฟล์ตามรูปแบบนี้:</p>
+                <div class="font-guide-pattern">
+                  <code>[ชื่อFont]-[Style].ttf</code>
+                </div>
+                <p class="mt-2 mb-1">Styles ที่รองรับ:</p>
+                <table class="font-guide-table">
+                  <tr><td><code>Regular</code></td><td>ตัวปกติ (จำเป็น)</td></tr>
+                  <tr><td><code>Bold</code></td><td>ตัวหนา</td></tr>
+                  <tr><td><code>Italic</code></td><td>ตัวเอียง</td></tr>
+                  <tr><td><code>BoldItalic</code></td><td>ตัวหนา+เอียง</td></tr>
+                </table>
+
+                <div class="font-guide-example">
+                  <div class="font-guide-example-title"><i class="bi bi-folder2-open me-1"></i> ตัวอย่าง: เพิ่ม font Sarabun</div>
+                  <div class="font-guide-files">
+                    <div class="font-file"><i class="bi bi-file-earmark-font"></i> Sarabun-Regular.ttf</div>
+                    <div class="font-file"><i class="bi bi-file-earmark-font"></i> Sarabun-Bold.ttf</div>
+                    <div class="font-file"><i class="bi bi-file-earmark-font"></i> Sarabun-Italic.ttf</div>
+                    <div class="font-file"><i class="bi bi-file-earmark-font"></i> Sarabun-BoldItalic.ttf</div>
+                  </div>
+                  <p class="mt-2 mb-0">Upload ทีละไฟล์ ระบบจะจับกลุ่มให้อัตโนมัติจากชื่อ font<br>
+                  ถ้ามีแค่ไฟล์เดียว (เช่น <code>MyFont.ttf</code>) ระบบจะใช้ไฟล์นั้นสำหรับทุก style</p>
+                </div>
+
+                <p class="mt-2 mb-0" style="font-size:11px;color:#64748b">
+                  <i class="bi bi-lightbulb me-1 text-warning"></i>
+                  แนะนำให้ดาวน์โหลด font จาก <a href="https://fonts.google.com" target="_blank" style="color:#60a5fa">Google Fonts</a> — เลือก font แล้วกด Download family จะได้ไฟล์ .ttf ครบทุก style
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals (original) -->
+    <Teleport to="body">
       <!-- Dept Modal -->
       <div v-if="showDeptModal" class="modal-bg-custom" @click.self="showDeptModal = false">
         <div class="glass-modal">
@@ -283,7 +408,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import api, { usersApi, settingsApi } from '../api'
+import api, { usersApi, settingsApi, fontsApi } from '../api'
 
 const authStore = useAuthStore()
 const users = ref([])
@@ -306,6 +431,20 @@ const aiProviders = ref([
 ])
 const activeProviderId = ref('gemini')
 const aiSaving = ref(false)
+
+// Font Management
+const allFonts = ref([])
+const fontSearch = ref('')
+const fontReloading = ref(false)
+const fontFileInput = ref(null)
+
+const filteredFonts = computed(() => {
+  const q = fontSearch.value.toLowerCase()
+  if (!q) return allFonts.value
+  return allFonts.value.filter(f =>
+    f.name.toLowerCase().includes(q) || f.key.toLowerCase().includes(q) || f.language.includes(q)
+  )
+})
 
 // Pagination, Sorting, Filtering
 const ITEMS_PER_PAGE = 5
@@ -429,6 +568,7 @@ async function loadData() {
 
 onMounted(() => {
   loadData()
+  loadFonts()
 })
 
 // Departments
@@ -519,6 +659,49 @@ async function resetUserPassword(user) {
   } catch (err) {
     alert(err.response?.data?.message || 'Failed to reset password')
   }
+}
+
+async function loadFonts() {
+  try {
+    const res = await fontsApi.getAllAdmin()
+    allFonts.value = res.data
+  } catch (e) { console.error('Failed to load fonts', e) }
+}
+
+async function toggleFontVisibility(font) {
+  try {
+    await fontsApi.toggleVisibility(font.key, !font.hidden)
+    font.hidden = !font.hidden
+  } catch (e) { alert(e.response?.data?.message || 'Failed') }
+}
+
+async function deleteFont(font) {
+  if (font.isBuiltin) return
+  if (!confirm(`ลบ font "${font.name}" ออกจากระบบ?`)) return
+  try {
+    await fontsApi.deleteFont(font.key)
+    allFonts.value = allFonts.value.filter(f => f.key !== font.key)
+  } catch (e) { alert(e.response?.data?.message || 'Failed to delete') }
+}
+
+async function uploadFont(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  try {
+    await fontsApi.uploadFont(file)
+    await loadFonts()
+    alert(`Font "${file.name}" uploaded successfully!`)
+  } catch (err) { alert(err.response?.data?.message || 'Upload failed') }
+  e.target.value = ''
+}
+
+async function reloadFonts() {
+  fontReloading.value = true
+  try {
+    await fontsApi.reloadFonts()
+    await loadFonts()
+  } catch (e) { alert('Failed to reload') }
+  finally { fontReloading.value = false }
 }
 
 async function saveAiProviders() {
@@ -673,6 +856,8 @@ async function saveAiProviders() {
 }
 .bg-danger-soft { background: rgba(239, 68, 68, 0.15); color: #f87171; }
 .bg-primary-soft { background: rgba(37, 99, 235, 0.15); color: #60a5fa; }
+.bg-success-soft { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.bg-warning-soft { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 .text-success-soft { color: #34d399; }
 .text-danger-soft { color: #f87171; }
 
@@ -860,4 +1045,87 @@ async function saveAiProviders() {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* Font Guide */
+.font-guide {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.font-guide-title {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid #1e293b;
+}
+.font-guide-body {
+  padding: 14px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.6;
+}
+.font-guide-body p { margin-bottom: 6px; }
+.font-guide-body code {
+  font-size: 11px;
+  background: #1e293b;
+  color: #60a5fa;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.font-guide-pattern {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: center;
+}
+.font-guide-pattern code {
+  font-size: 13px;
+  background: transparent;
+  color: #38bdf8;
+}
+.font-guide-table {
+  width: 100%;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.font-guide-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid #1e293b;
+}
+.font-guide-table td:first-child { width: 120px; }
+.font-guide-example {
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.font-guide-example-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #60a5fa;
+  margin-bottom: 8px;
+}
+.font-guide-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.font-file {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #e2e8f0;
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.font-file i { color: #60a5fa; font-size: 12px; }
 </style>

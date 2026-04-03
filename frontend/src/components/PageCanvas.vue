@@ -50,7 +50,7 @@
       <!-- Text element -->
       <template v-if="el.type === 'text'">
         <textarea
-          v-if="editingId === el.id"
+          v-if="editingId === el.id && !el.richMode"
           class="inline-edit"
           :value="el.content"
           @input="$emit('update-element', el.id, { content: $event.target.value })"
@@ -59,6 +59,21 @@
           ref="editInput"
           :style="getTextStyle(el)"
         ></textarea>
+        <!-- Rich text preview -->
+        <div v-else-if="el.richMode && el.richContent && el.richContent.length" class="text-content rich-preview" :style="getRichContainerStyle(el)">
+          <template v-for="(block, bi) in el.richContent" :key="bi">
+            <div v-if="block.type === 'heading'" class="rich-heading" :class="'rich-h' + block.level"
+              :style="getRichBlockStyle(el, block)">{{ block.text || '' }}</div>
+            <div v-else-if="block.type === 'list'" :style="{ paddingLeft: ((block.indent || 0) * 20 + 16) + 'px' }">
+              <div v-for="(item, li) in normalizeListItems(block.items)" :key="li" class="rich-list-item"
+                :style="getRichBlockStyle(el, block)">
+                <span class="rich-marker" :style="{ paddingLeft: (item.indent || 0) * 16 + 'px' }">{{ getCanvasMarker(block.style, li, item.indent || 0, block.startNumber || 1, item.checked) }}</span>
+                <span>{{ item.text }}</span>
+              </div>
+            </div>
+            <div v-else class="rich-para" :style="getRichBlockStyle(el, block)">{{ block.text || '' }}</div>
+          </template>
+        </div>
         <div v-else class="text-content" :style="getTextStyle(el)">{{ el.content }}</div>
       </template>
 
@@ -99,22 +114,44 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="i in 3" :key="i">
-                <td v-for="col in el.columns" :key="col.key"
-                  :style="{
-                    background:  i % 2 === 0 && el.altRowBgColor ? el.altRowBgColor : (el.rowBgColor || '#ffffff'),
-                    color:       el.rowTextColor || '#111827',
-                    padding:     (el.cellPadding || 6) + 'px',
-                    fontSize:    (col.fontSize || el.fontSize || 11) + 'px',
-                    fontWeight:  col.fontWeight || el.bodyFontWeight || 'normal',
-                    textAlign:   col.align || el.bodyAlign || 'left',
-                    fontFamily:  getCssFontFamily(el.fontFamily),
-                    border:      `${el.innerBorderWidth ?? el.borderWidth ?? 1}px solid ${el.innerBorderColor || el.borderColor || '#e5e7eb'}`,
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                  }">
-                  &#123;&#123;{{ col.key }}&#125;&#125;
-                </td>
-              </tr>
+              <!-- Static rows -->
+              <template v-if="!el.dataKey && el.staticRows && el.staticRows.length">
+                <tr v-for="(row, ri) in el.staticRows" :key="'s'+ri">
+                  <td v-for="col in el.columns" :key="col.key"
+                    :style="{
+                      background:  ri % 2 === 1 && el.altRowBgColor ? el.altRowBgColor : (el.rowBgColor || '#ffffff'),
+                      color:       el.rowTextColor || '#111827',
+                      padding:     (el.cellPadding || 6) + 'px',
+                      fontSize:    (col.fontSize || el.fontSize || 11) + 'px',
+                      fontWeight:  col.fontWeight || el.bodyFontWeight || 'normal',
+                      textAlign:   col.align || el.bodyAlign || 'left',
+                      fontFamily:  getCssFontFamily(el.fontFamily),
+                      border:      `${el.innerBorderWidth ?? el.borderWidth ?? 1}px solid ${el.innerBorderColor || el.borderColor || '#e5e7eb'}`,
+                      overflow: 'hidden', textOverflow: 'ellipsis',
+                    }">
+                    {{ row[col.key] || '' }}
+                  </td>
+                </tr>
+              </template>
+              <!-- Dynamic placeholder rows -->
+              <template v-else>
+                <tr v-for="i in 3" :key="i">
+                  <td v-for="col in el.columns" :key="col.key"
+                    :style="{
+                      background:  i % 2 === 0 && el.altRowBgColor ? el.altRowBgColor : (el.rowBgColor || '#ffffff'),
+                      color:       el.rowTextColor || '#111827',
+                      padding:     (el.cellPadding || 6) + 'px',
+                      fontSize:    (col.fontSize || el.fontSize || 11) + 'px',
+                      fontWeight:  col.fontWeight || el.bodyFontWeight || 'normal',
+                      textAlign:   col.align || el.bodyAlign || 'left',
+                      fontFamily:  getCssFontFamily(el.fontFamily),
+                      border:      `${el.innerBorderWidth ?? el.borderWidth ?? 1}px solid ${el.innerBorderColor || el.borderColor || '#e5e7eb'}`,
+                      overflow: 'hidden', textOverflow: 'ellipsis',
+                    }">
+                    &#123;&#123;{{ col.key }}&#125;&#125;
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
@@ -375,17 +412,10 @@ function onCanvasMousedown(e) {
 }
 
 function onElementClick(e, el) {
-  if (e.shiftKey) {
-    const ids = [...props.selectedIds]
-    const idx = ids.indexOf(el.id)
-    if (idx === -1) ids.push(el.id)
-    else ids.splice(idx, 1)
-    emit('select-multi', ids)
-    emit('select', ids[ids.length - 1] || null)
-  } else {
-    emit('select', el.id)
-    emit('select-multi', [])
-  }
+  // Ctrl/Shift+Click is handled in startDrag already
+  if (e.shiftKey || e.ctrlKey || e.metaKey) return
+  emit('select', el.id)
+  emit('select-multi', [])
 }
 
 function startMarquee(e) {
@@ -555,6 +585,78 @@ function getImageSrc(src) {
   return `http://localhost:3000${src}`
 }
 
+function getRichContainerStyle(el) {
+  return {
+    fontFamily: getCssFontFamily(el.fontFamily),
+    fontSize: (el.fontSize || 12) + 'px',
+    color: el.color || '#000',
+    lineHeight: el.lineHeight || 1.4,
+    padding: (el.padding || 4) + 'px',
+    background: el.backgroundColor || 'transparent',
+    border: el.borderColor ? `${el.borderWidth || 1}px solid ${el.borderColor}` : 'none',
+    width: '100%',
+    height: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+  }
+}
+
+const HEADING_SCALE = { 1: 1.8, 2: 1.4, 3: 1.15 }
+
+function getRichBlockStyle(el, block) {
+  const baseSize = el.fontSize || 12
+  const scale = block.type === 'heading' ? (HEADING_SCALE[block.level] || 1) : 1
+  return {
+    fontSize: Math.round(baseSize * scale) + 'px',
+    fontWeight: (block.bold || block.type === 'heading') ? 'bold' : (el.fontWeight || 'normal'),
+    fontStyle: block.italic ? 'italic' : (el.fontStyle || 'normal'),
+    textAlign: block.align || el.align || 'left',
+    color: block.color || el.color || '#000',
+    paddingLeft: (block.indent || 0) * 20 + 'px',
+    marginBottom: block.type === 'heading' ? '4px' : '2px',
+  }
+}
+
+function normalizeListItems(items) {
+  if (!items || !items.length) return []
+  return items.map(it => typeof it === 'string' ? { text: it, indent: 0, checked: false } : { text: it.text || '', indent: it.indent || 0, checked: !!it.checked })
+}
+
+const CANVAS_UNORDERED = {
+  disc: ['●','○','■'], circle: ['○','◦','▪'], square: ['■','▪','▫'],
+  dash: ['–','–','–'], arrow: ['▸','▹','▸'], check: ['✓','✓','✓'],
+  checkbox: ['☐','☐','☐'], radio: ['○','○','○'],
+}
+const THAI_DIGITS_C = ['๐','๑','๒','๓','๔','๕','๖','๗','๘','๙']
+function toThaiC(n) { return String(n).split('').map(d => THAI_DIGITS_C[+d]).join('') }
+function toRomanC(n, upper) {
+  const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1], s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I']
+  let r=''; for(let i=0;i<v.length;i++){while(n>=v[i]){r+=s[i];n-=v[i]}} return upper?r:r.toLowerCase()
+}
+function toAlphaC(n, upper) {
+  let r=''; while(n>0){n--;r=String.fromCharCode(65+(n%26))+r;n=Math.floor(n/26)} return upper?r:r.toLowerCase()
+}
+function getCanvasMarker(style, index, level, startNum, checked) {
+  const ordered = ['decimal','decimal-zero','lower-alpha','upper-alpha','lower-roman','upper-roman','thai']
+  if (ordered.includes(style)) {
+    const num = (startNum||1)+index
+    switch(style) {
+      case 'decimal': return num+'.'
+      case 'decimal-zero': return String(num).padStart(2,'0')+'.'
+      case 'lower-alpha': return toAlphaC(num,false)+'.'
+      case 'upper-alpha': return toAlphaC(num,true)+'.'
+      case 'lower-roman': return toRomanC(num,false)+'.'
+      case 'upper-roman': return toRomanC(num,true)+'.'
+      case 'thai': return toThaiC(num)+'.'
+      default: return num+'.'
+    }
+  }
+  if (style === 'checkbox') return checked ? '☑' : '☐'
+  if (style === 'radio') return checked ? '◉' : '○'
+  const chars = CANVAS_UNORDERED[style] || CANVAS_UNORDERED['disc']
+  return chars[Math.min(level||0, chars.length-1)]
+}
+
 function handleImgError(e) {
   e.target.style.display = 'none'
 }
@@ -581,6 +683,22 @@ function stopEdit() {
 let dragState = null
 function startDrag(e, el) {
   if (editingId.value) return
+
+  // Handle Ctrl/Shift+Click for multi-select (don't start drag)
+  if (e.shiftKey || e.ctrlKey || e.metaKey) {
+    // Start from current selectedIds, or include the already-selected element
+    let ids = [...props.selectedIds]
+    if (ids.length === 0 && props.selectedId) {
+      ids.push(props.selectedId)
+    }
+    const idx = ids.indexOf(el.id)
+    if (idx === -1) ids.push(el.id)
+    else if (ids.length > 1) ids.splice(idx, 1)
+    emit('select-multi', ids)
+    emit('select', ids[ids.length - 1] || null)
+    return
+  }
+
   const isMulti = props.selectedIds.length > 1 && props.selectedIds.includes(el.id)
   if (!isMulti) {
     emit('select', el.id)
@@ -840,4 +958,14 @@ function onResizeEnd() {
 .resize-handle.s { bottom: -4px; left: calc(50% - 4px); cursor: s-resize; }
 .resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
 .resize-handle.w { top: calc(50% - 4px); left: -4px; cursor: w-resize; }
+
+/* Rich text preview */
+.rich-preview { white-space: normal; word-break: break-word; }
+.rich-heading { line-height: 1.3; }
+.rich-h1 { font-size: 1.8em; }
+.rich-h2 { font-size: 1.4em; }
+.rich-h3 { font-size: 1.15em; }
+.rich-para { line-height: 1.4; margin-bottom: 2px; }
+.rich-list-item { display: flex; gap: 4px; line-height: 1.4; }
+.rich-marker { flex-shrink: 0; min-width: 14px; text-align: right; opacity: 0.7; }
 </style>

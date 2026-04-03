@@ -244,13 +244,20 @@ X-API-Key: YOUR_API_KEY
         </div>
       </div>
 
-      <!-- PDF Preview panel -->
-      <div class="preview-panel" v-if="previewUrl">
-        <div class="preview-panel-header">
-          <span class="fw-semibold">Preview</span>
-          <button class="toolbar-btn" @click="previewUrl = null"><i class="bi bi-x"></i></button>
+      <!-- PDF Preview Modal -->
+      <div v-if="previewUrl" class="gen-preview-modal-bg" @click.self="previewUrl = null; genPreviewFull = false">
+        <div class="gen-preview-modal" :class="{ 'gen-preview-fullscreen': genPreviewFull }">
+          <div class="gen-preview-header">
+            <h6 class="m-0 fw-semibold text-white">Preview PDF</h6>
+            <div class="d-flex gap-2 ms-auto align-items-center">
+              <button class="toolbar-btn" @click="genPreviewFull = !genPreviewFull" :title="genPreviewFull ? 'Exit Fullscreen' : 'Fullscreen'">
+                <i class="bi" :class="genPreviewFull ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'"></i>
+              </button>
+              <button class="toolbar-btn" @click="previewUrl = null; genPreviewFull = false"><i class="bi bi-x-lg"></i></button>
+            </div>
+          </div>
+          <iframe :src="previewUrl" class="gen-preview-iframe"></iframe>
         </div>
-        <iframe :src="previewUrl" class="pdf-frame"></iframe>
       </div>
     </div>
   </div>
@@ -270,6 +277,7 @@ const jsonInput = ref('{}')
 const jsonError = ref('')
 const generating = ref(null)
 const previewUrl = ref(null)
+const genPreviewFull = ref(false)
 const apiMode = ref('file') // 'file' or 'base64'
 const copiedLabel = ref(null)
 
@@ -460,7 +468,8 @@ function copyToClipboard(text, label) {
   flex: 1;
   overflow-y: auto;
   padding: 32px;
-  max-width: 800px;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 .card {
@@ -535,11 +544,59 @@ function copyToClipboard(text, label) {
 }
 
 .preview-panel {
-  width: 50%;
-  border-left: 1px solid #1e293b;
+  display: none; /* replaced by modal */
+}
+
+.preview-panel.preview-fullscreen {
+  display: none;
+}
+
+/* Preview Modal */
+.gen-preview-modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.gen-preview-modal {
+  background: #1e293b;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+  width: 90vw;
+  height: 85vh;
   display: flex;
   flex-direction: column;
-  background: #0f172a;
+  overflow: hidden;
+  animation: modalUp 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modalUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.gen-preview-modal.gen-preview-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+.gen-preview-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.gen-preview-iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
 }
 
 .preview-panel-header {

@@ -59,12 +59,29 @@
     <!-- ═══ TEXT ELEMENT ═══════════════════════════════════════════════ -->
     <template v-if="element.type === 'text'">
       <div class="panel-section">
-        <div class="panel-section-title">Content</div>
-        <textarea class="form-control form-control-sm" rows="3"
-          :value="element.content"
-          @input="update('content', $event.target.value)"
-          placeholder="Text content..."></textarea>
-        <small class="text-muted mt-1 d-block">ใช้ <code>&#123;&#123;variable&#125;&#125;</code> สำหรับข้อมูลแบบ dynamic</small>
+        <div class="panel-section-title d-flex align-items-center justify-content-between">
+          <span>Content</span>
+          <div class="form-check form-switch mb-0" style="padding-left:2.5em">
+            <input class="form-check-input" type="checkbox" :checked="element.richMode" @change="update('richMode', $event.target.checked)" id="richModeToggle" />
+            <label class="form-check-label" for="richModeToggle" style="font-size:10px;color:var(--gray-500)">Rich Text</label>
+          </div>
+        </div>
+
+        <!-- Plain text mode -->
+        <template v-if="!element.richMode">
+          <textarea class="form-control form-control-sm" rows="3"
+            :value="element.content"
+            @input="update('content', $event.target.value)"
+            placeholder="Text content..."></textarea>
+          <small class="text-muted mt-1 d-block">ใช้ <code>&#123;&#123;variable&#125;&#125;</code> สำหรับข้อมูลแบบ dynamic</small>
+        </template>
+
+        <!-- Rich text mode -->
+        <template v-if="element.richMode">
+          <RichTextEditor :modelValue="element.richContent || []" @update:modelValue="update('richContent', $event)" />
+          <small class="text-muted mt-1 d-block">ใช้ <code>&#123;&#123;variable&#125;&#125;</code> ใน text ได้เช่นกัน</small>
+        </template>
+
         <div class="prop-row mt-2">
           <label class="prop-label">Binding Key</label>
           <input type="text" class="form-control form-control-sm prop-control" :value="element.bindingKey||''" @change="update('bindingKey',$event.target.value)" placeholder="ไม่บังคับ" />
@@ -304,12 +321,50 @@
     <!-- ═══ TABLE ELEMENT ═══════════════════════════════════════════════ -->
     <template v-if="element.type === 'table'">
       <div class="panel-section">
-        <div class="panel-section-title">Data Binding</div>
-        <div class="prop-row">
-          <label class="prop-label">Data Key</label>
-          <input type="text" class="form-control form-control-sm prop-control" :value="element.dataKey" @change="update('dataKey',$event.target.value)" placeholder="items" />
+        <div class="panel-section-title">Data Source</div>
+        <!-- Mode toggle -->
+        <div class="d-flex gap-2 mb-2">
+          <button class="btn btn-xs" :class="element.dataKey ? 'btn-primary' : 'btn-outline-secondary'" @click="update('dataKey', element.dataKey || 'items')">
+            <i class="bi bi-link-45deg me-1"></i>Dynamic
+          </button>
+          <button class="btn btn-xs" :class="!element.dataKey ? 'btn-primary' : 'btn-outline-secondary'" @click="update('dataKey', '')">
+            <i class="bi bi-pencil-square me-1"></i>Static
+          </button>
         </div>
-        <small class="text-muted">เช่น <code>items</code> หรือ <code>order.lines</code></small>
+
+        <!-- Dynamic mode -->
+        <template v-if="element.dataKey">
+          <div class="prop-row">
+            <label class="prop-label">Data Key</label>
+            <input type="text" class="form-control form-control-sm prop-control" :value="element.dataKey" @change="update('dataKey',$event.target.value)" placeholder="items" />
+          </div>
+          <small class="text-muted">เช่น <code>items</code> หรือ <code>order.lines</code></small>
+        </template>
+
+        <!-- Static mode -->
+        <template v-if="!element.dataKey">
+          <div class="static-rows-editor">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <small class="text-muted fw-semibold">Static Rows ({{ (element.staticRows || []).length }})</small>
+              <button class="btn btn-xs btn-outline-primary" @click="addStaticRow"><i class="bi bi-plus"></i> Row</button>
+            </div>
+            <div class="static-rows-list">
+              <div v-for="(row, ri) in (element.staticRows || [])" :key="ri" class="static-row-item">
+                <div class="d-flex align-items-center gap-1 mb-1">
+                  <span class="col-num">{{ ri + 1 }}</span>
+                  <button class="btn btn-xs btn-outline-danger ms-auto" @click="removeStaticRow(ri)"><i class="bi bi-x"></i></button>
+                </div>
+                <div class="d-flex flex-wrap gap-1">
+                  <div v-for="col in element.columns" :key="col.key" style="flex:1;min-width:60px">
+                    <label style="font-size:9px;color:var(--gray-400)">{{ col.label || col.key }}</label>
+                    <input type="text" class="form-control form-control-sm" style="font-size:10px"
+                      :value="row[col.key] || ''" @change="updateStaticCell(ri, col.key, $event.target.value)" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
 
       <div class="panel-section">
@@ -573,6 +628,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { uploadApi, fontsApi } from '../api'
+import RichTextEditor from './RichTextEditor.vue'
 
 const props = defineProps({ element: Object })
 const emit  = defineEmits(['update', 'delete', 'duplicate', 'bring-forward', 'send-backward'])
@@ -699,6 +755,24 @@ function addCol() {
 }
 function removeCol(i) { const c = [...(props.element.columns||[])]; c.splice(i,1); update('columns',c) }
 function updateCol(i, key, val) { update('columns', props.element.columns.map((c,idx) => idx===i ? {...c,[key]:val} : c)) }
+
+// ─── static rows helpers ──────────────────────────────────────────────────────
+function addStaticRow() {
+  const rows = [...(props.element.staticRows || [])]
+  const newRow = {}
+  ;(props.element.columns || []).forEach(c => { newRow[c.key] = '' })
+  rows.push(newRow)
+  update('staticRows', rows)
+}
+function removeStaticRow(i) {
+  const rows = [...(props.element.staticRows || [])]
+  rows.splice(i, 1)
+  update('staticRows', rows)
+}
+function updateStaticCell(rowIdx, colKey, val) {
+  const rows = (props.element.staticRows || []).map((r, i) => i === rowIdx ? { ...r, [colKey]: val } : r)
+  update('staticRows', rows)
+}
 
 async function uploadImage(e) {
   const file = e.target.files[0]; if (!file) return
@@ -843,6 +917,13 @@ function normalizeBase64(src) {
 
 .btn-xs { font-size: 11px; padding: 2px 6px; line-height: 1.5; }
 code { font-size: 11px; background: var(--gray-100); padding: 1px 4px; border-radius: 3px; }
+
+/* Static rows editor */
+.static-rows-list { max-height: 300px; overflow-y: auto; }
+.static-row-item {
+  background: var(--gray-50); border: 1px solid var(--gray-200);
+  border-radius: 6px; padding: 6px 8px; margin-bottom: 4px;
+}
 
 /* Image mode tabs */
 .img-mode-tabs { display: flex; border: 1px solid var(--gray-200); border-radius: 6px; overflow: hidden; }
